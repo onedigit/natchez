@@ -77,7 +77,7 @@ object Trace {
     */
   class KleisliTrace[F[_]](implicit ev: Bracket[F, Throwable]) extends Trace[Kleisli[F, Span[F], *]] {
 
-    def kernel: Kleisli[F, Span[F], Kernel] = Kleisli(_.kernel)
+    def kernel: Kleisli[F, Span[F], Kernel] = Kleisli(spanF => spanF.kernel)
 
     def put(fields: (String, TraceValue)*): Kleisli[F, Span[F], Unit] = Kleisli(_.put(fields: _*))
 

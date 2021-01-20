@@ -7,7 +7,7 @@ package jaeger
 
 import cats.effect._
 import cats.syntax.all._
-import io.jaegertracing.Configuration
+import io.jaegertracing.{internal, Configuration}
 import io.jaegertracing.internal.{JaegerTracer => NativeJaegerTracer}
 import io.jaegertracing.internal.exceptions.UnsupportedFormatException
 import io.opentracing.propagation._
@@ -31,7 +31,7 @@ object Jaeger {
         new EntryPoint[F] {
 
           def continue(name: String, kernel: Kernel): Resource[F, Span[F]] = {
-            Resource
+            val r: Resource[F, internal.JaegerSpan] = Resource
               .make(
                 Sync[F].delay {
                   val p = jaegerTracer.extract(
@@ -41,18 +41,21 @@ object Jaeger {
                   jaegerTracer.buildSpan(name).asChildOf(p).start()
                 }
               )(s => Sync[F].delay(s.finish()))
-              .map(JaegerSpan(jaegerTracer, _, uriPrefix))
+
+            r.map(span => JaegerSpan(jaegerTracer, span, uriPrefix))
           }
 
           def root(name: String): Resource[F, Span[F]] = {
-            Resource
+            val r: Resource[F, internal.JaegerSpan] = Resource
               .make(Sync[F].delay(jaegerTracer.buildSpan(name).start()))(s => Sync[F].delay(s.finish()))
-              .map(JaegerSpan(jaegerTracer, _, uriPrefix))
+
+            val result: Resource[F, JaegerSpan[F]] = r.map(span => JaegerSpan(jaegerTracer, span, uriPrefix))
+            result
           }
 
           def continueOrElseRoot(name: String, kernel: Kernel): Resource[F, Span[F]] = {
             continue(name, kernel) flatMap {
-              case null => root(name) // hurr, means headers are incomplete or invalid
+              case null => root(name) // hmm, means headers are incomplete or invalid
               case a    => Resource.pure[F, Span[F]](a)
             } recoverWith {
               case _: UnsupportedFormatException => root(name)

@@ -16,11 +16,24 @@ import java.net.URI
 import scala.concurrent.duration._
 import scala.util.Random
 
-object Main extends IOApp {
+object Example extends IOApp {
+
+  private final val NUM_VALUES_TO_SORT = 20
+
+  def run(args: List[String]): IO[ExitCode] = {
+    entryPoint[IO].use { ep: EntryPoint[IO] =>
+      ep.root("this is the root span").use { span =>
+        {
+          val rf: Kleisli[IO, Span[IO], Unit] = runF[Kleisli[IO, Span[IO], *]]
+          rf.run(span)
+        }
+      } *> IO.sleep(1.second) // Turns out Tracer.close() in Jaeger doesn't block. Annoying. Maybe fix in there?
+    } as ExitCode.Success
+  }
 
   // Intentionally slow parallel quicksort, to demonstrate branching. If we run too quickly it seems
   // to break Jaeger with "skipping clock skew adjustment" so let's pause a bit each time.
-  def qsort[F[_]: Monad: Parallel: Trace: Timer, A: Order](as: List[A]): F[List[A]] =
+  def qsort[F[_]: Monad: Parallel: Trace: Timer, A: Order](as: List[A]): F[List[A]] = {
     Trace[F].span(as.mkString(",")) {
       Timer[F].sleep(10.milli) *> {
         as match {
@@ -31,17 +44,53 @@ object Main extends IOApp {
         }
       }
     }
+  }
 
-  def runF[F[_]: Sync: Trace: Parallel: Timer]: F[Unit] =
+  def runF[F[_]: Sync: Trace: Parallel: Timer]: F[Unit] = {
     Trace[F].span("Sort some stuff!") {
       for {
-        as <- Sync[F].delay(List.fill(100)(Random.nextInt(1000)))
+        as <- Sync[F].delay(List.fill(NUM_VALUES_TO_SORT)(Random.nextInt(1000)))
+        _  <- Sync[F].delay(println(s"Samples to sort: $as"))
         _  <- qsort[F, Int](as)
         u  <- Trace[F].traceUri
         _  <- u.traverse(uri => Sync[F].delay(println(s"View this trace at $uri")))
         _  <- Sync[F].delay(println("Done."))
       } yield ()
     }
+  }
+
+  // Jaeger
+  def entryPoint[F[_]: Sync]: Resource[F, EntryPoint[F]] = {
+    import io.jaegertracing.Configuration._
+    import natchez.jaeger.Jaeger
+    //
+    // See: https://opentracing.io/docs/getting-started/
+    //
+    Jaeger.entryPoint[F](
+      system = "natchez-example",
+      uriPrefix = Some(new URI("http://tr.onedigit.org:16686"))
+    ) { conf: Configuration =>
+      val samplerConfiguration = new SamplerConfiguration()
+        .withType(ConstSampler.TYPE)
+        .withParam(1)
+      val senderConfiguration = new SenderConfiguration()
+        .withAgentHost("tr.onedigit.org")
+        .withAgentPort(5775)
+      // .withEndpoint("http://tr.onedigit.org:16686")
+      val reporterConfiguration = ReporterConfiguration
+        .fromEnv()
+        .withLogSpans(true)
+        .withFlushInterval(100)
+        .withMaxQueueSize(1)
+        .withSender(senderConfiguration)
+      Sync[F].delay {
+        conf
+          .withSampler(samplerConfiguration)
+          .withReporter(reporterConfiguration)
+          .getTracer
+      }
+    }
+  }
 
   // For Honeycomb you would say
   // def entryPoint[F[_]: Sync]: Resource[F, EntryPoint[F]] =
@@ -84,26 +133,6 @@ object Main extends IOApp {
   //   )
   // }
 
-  // Jaeger
-  def entryPoint[F[_]: Sync]: Resource[F, EntryPoint[F]] = {
-    import io.jaegertracing.Configuration._
-    import natchez.jaeger.Jaeger
-    //
-    // See: https://opentracing.io/docs/getting-started/
-    //
-    Jaeger.entryPoint[F](
-      system = "natchez-example",
-      uriPrefix = Some(new URI("http://tr.onedigit.org:16686"))
-    ) { conf: Configuration =>
-      Sync[F].delay {
-        conf
-          .withSampler(SamplerConfiguration.fromEnv.withType(ConstSampler.TYPE).withParam(1))
-          .withReporter(ReporterConfiguration.fromEnv.withLogSpans(true))
-          .getTracer
-      }
-    }
-  }
-
   // Log
   // def entryPoint[F[_]: Sync]: Resource[F, EntryPoint[F]] = {
   // import natchez.log.Log
@@ -112,13 +141,5 @@ object Main extends IOApp {
   // implicit val log: Logger[F] = Slf4jLogger.getLogger[IO]
   // Log.entryPoint[F]("foo").pure[Resource[F, *]]
   // }
-
-  def run(args: List[String]): IO[ExitCode] = {
-    entryPoint[IO].use { ep =>
-      ep.root("this is the root span").use { span =>
-        runF[Kleisli[IO, Span[IO], *]].run(span)
-      } *> IO.sleep(1.second) // Turns out Tracer.close() in Jaeger doesn't block. Annoying. Maybe fix in there?
-    } as ExitCode.Success
-  }
 
 }

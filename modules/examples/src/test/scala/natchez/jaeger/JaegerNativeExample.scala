@@ -9,6 +9,7 @@ import io.jaegertracing.{internal, Configuration}
 import io.jaegertracing.internal.samplers.ConstSampler
 import io.jaegertracing.internal.{JaegerTracer, MDCScopeManager}
 import io.jaegertracing.Configuration.{ReporterConfiguration, SamplerConfiguration, SenderConfiguration}
+import io.opentracing.propagation.{Format, TextMapAdapter}
 
 /**
   * Use jaeger client directly to test whether jaeger is working or not.
@@ -21,15 +22,26 @@ object JaegerNativeExample extends StrictLogging {
 
     val tracer = configureTracer()
 
+    // tracer.extract()
+
     val span: internal.JaegerSpan = tracer.buildSpan("hello").start()
     val scope                     = tracer.scopeManager().activate(span)
     logger.info("Starting..............")
     Thread.sleep(1000)
     logger.info("hello world")
+
+    val map = new java.util.HashMap[String, String]
+    tracer.inject(
+      span.context,
+      Format.Builtin.HTTP_HEADERS,
+      new TextMapAdapter(map)
+    )
+    logger.info(s"Map: $map")
+
     scope.close()
     span.finish()
 
-    Thread.sleep(5000)
+    Thread.sleep(1000)
   }
 
   def configureTracer(): JaegerTracer = {
