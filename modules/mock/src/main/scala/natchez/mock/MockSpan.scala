@@ -5,19 +5,16 @@
 package natchez
 package mock
 
+import cats.effect.{Resource, Sync}
+import cats.implicits._
+import io.{opentracing => ot}
+import io.opentracing.propagation._
+import natchez.TraceValue.{BooleanValue, NumberValue, StringValue}
+
+import java.net.URI
 import scala.jdk.CollectionConverters._
 
-import cats.effect.{ Resource, Sync }
-import cats.implicits._
-import io.{ opentracing => ot }
-import io.opentracing.propagation.{ Format, TextMapAdapter }
-import natchez.TraceValue.{ BooleanValue, NumberValue, StringValue }
-import java.net.URI
-
-final case class MockSpan[F[_] : Sync](
-  tracer: ot.mock.MockTracer,
-  span: ot.mock.MockSpan)
-  extends Span[F] {
+final case class MockSpan[F[_]: Sync](tracer: ot.mock.MockTracer, span: ot.mock.MockSpan) extends Span[F] {
 
   def kernel: F[Kernel] =
     Sync[F].delay {
@@ -26,14 +23,14 @@ final case class MockSpan[F[_] : Sync](
         span.context,
         Format.Builtin.HTTP_HEADERS,
         new TextMapAdapter(m)
-        )
+      )
       Kernel(m.asScala.toMap)
     }
 
   def put(fields: (String, TraceValue)*): F[Unit] =
     fields.toList.traverse_ {
-      case (k, StringValue(v)) => Sync[F].delay(span.setTag(k, v))
-      case (k, NumberValue(v)) => Sync[F].delay(span.setTag(k, v))
+      case (k, StringValue(v))  => Sync[F].delay(span.setTag(k, v))
+      case (k, NumberValue(v))  => Sync[F].delay(span.setTag(k, v))
       case (k, BooleanValue(v)) => Sync[F].delay(span.setTag(k, v))
     }
 
@@ -48,6 +45,6 @@ final case class MockSpan[F[_] : Sync](
 
   // TODO
   def traceId: F[Option[String]] = none.pure[F]
-  def traceUri: F[Option[URI]] = none.pure[F]
+  def traceUri: F[Option[URI]]   = none.pure[F]
 
 }

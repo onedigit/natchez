@@ -5,21 +5,19 @@
 package natchez
 package jaeger
 
-import io.{ opentracing => ot }
 import cats.data.Nested
-import cats.effect.Sync
-import cats.effect.Resource
+import cats.effect.{Resource, Sync}
 import cats.syntax.all._
-import io.opentracing.propagation.Format
-import io.opentracing.propagation.TextMapAdapter
+import io.{opentracing => ot}
+import io.opentracing.propagation._
 
-import scala.jdk.CollectionConverters._
 import java.net.URI
+import scala.jdk.CollectionConverters._
 
 private[jaeger] final case class JaegerSpan[F[_]: Sync](
-  tracer: ot.Tracer,
-  span:   ot.Span,
-  prefix: Option[URI]
+    tracer: ot.Tracer,
+    span: ot.Span,
+    prefix: Option[URI]
 ) extends Span[F] {
   import TraceValue._
 
@@ -41,19 +39,23 @@ private[jaeger] final case class JaegerSpan[F[_]: Sync](
       case (k, BooleanValue(v)) => Sync[F].delay(span.setTag(k, v))
     }
 
-  def span(name: String): Resource[F,Span[F]] =
-    Resource.make(
-      Sync[F].delay(tracer.buildSpan(name).asChildOf(span).start))(
-      s => Sync[F].delay(s.finish)
-    ).map(JaegerSpan(tracer, _, prefix))
+  def span(name: String): Resource[F, Span[F]] =
+    Resource
+      .make(
+        Sync[F].delay(tracer.buildSpan(name).asChildOf(span).start)
+      )(s => Sync[F].delay(s.finish()))
+      .map(JaegerSpan(tracer, _, prefix))
 
   def traceId: F[Option[String]] =
     // this seems to work … is it legit?
     kernel.map(_.toHeaders.get("uber-trace-id").map(_.takeWhile(_ != ':')))
 
   def traceUri: F[Option[URI]] =
-    (Nested(prefix.pure[F]), Nested(traceId)).mapN { (uri, id) =>
+    (
+      Nested(prefix.pure[F]),
+      Nested(traceId)
+    ).mapN { (uri, id) =>
       uri.resolve(s"/trace/$id")
-    } .value
+    }.value
 
 }

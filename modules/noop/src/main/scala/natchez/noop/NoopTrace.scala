@@ -5,12 +5,12 @@
 package natchez
 package noop
 
-import cats._
-import cats.effect.Resource
+import cats.Applicative
 import cats.syntax.all._
+
 import java.net.URI
 
-final case class NoopSpan[F[_]: Applicative]() extends Span[F] {
+final case class NoopTrace[F[_]: Applicative]() extends Trace[F] {
 
   override def put(fields: (String, TraceValue)*): F[Unit] =
     Applicative[F].unit
@@ -18,11 +18,11 @@ final case class NoopSpan[F[_]: Applicative]() extends Span[F] {
   override def kernel: F[Kernel] =
     Applicative[F].pure(Kernel(Map.empty))
 
-  override def span(name: String): Resource[F, Span[F]] =
-    Resource.liftF(NoopSpan[F]().pure[F])
+  override def span[A](name: String)(k: F[A]): F[A] =
+    k
 
-  // TODO
-  def traceId: F[Option[String]] = none.pure[F]
-  def traceUri: F[Option[URI]] = none.pure[F]
+  def traceId: F[Option[String]] =  /*_*/ none.pure[F] /*_*/
+
+  def traceUri: F[Option[URI]] =  /*_*/ none.pure[F] /*_*/
 
 }

@@ -8,6 +8,8 @@ import cats._
 import cats.data.Kleisli
 import cats.effect._
 import cats.syntax.all._
+import io.jaegertracing.Configuration
+import io.jaegertracing.internal.samplers.ConstSampler
 import natchez._
 
 import java.net.URI
@@ -21,8 +23,8 @@ object Main extends IOApp {
   def qsort[F[_]: Monad: Parallel: Trace: Timer, A: Order](as: List[A]): F[List[A]] =
     Trace[F].span(as.mkString(",")) {
       Timer[F].sleep(10.milli) *> {
-          as match {
-          case Nil    => Monad[F].pure(Nil)
+        as match {
+          case Nil => Monad[F].pure(Nil)
           case h :: t =>
             val (a, b) = t.partition(_ <= h)
             (qsort[F, A](a), qsort[F, A](b)).parMapN(_ ++ List(h) ++ _)
@@ -86,25 +88,29 @@ object Main extends IOApp {
   def entryPoint[F[_]: Sync]: Resource[F, EntryPoint[F]] = {
     import io.jaegertracing.Configuration._
     import natchez.jaeger.Jaeger
+    //
+    // See: https://opentracing.io/docs/getting-started/
+    //
     Jaeger.entryPoint[F](
-      system    = "natchez-example",
-      uriPrefix = Some(new URI("http://localhost:16686")),
-    ) { c =>
+      system = "natchez-example",
+      uriPrefix = Some(new URI("http://tr.onedigit.org:16686"))
+    ) { conf: Configuration =>
       Sync[F].delay {
-        c.withSampler(SamplerConfiguration.fromEnv)
-         .withReporter(ReporterConfiguration.fromEnv)
-         .getTracer
+        conf
+          .withSampler(SamplerConfiguration.fromEnv.withType(ConstSampler.TYPE).withParam(1))
+          .withReporter(ReporterConfiguration.fromEnv.withLogSpans(true))
+          .getTracer
       }
     }
   }
 
   // Log
   // def entryPoint[F[_]: Sync]: Resource[F, EntryPoint[F]] = {
-  //   import natchez.log.Log
-  //   import io.chrisdavenport.log4cats.Logger
-  //   import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-  //   implicit val log: Logger[F] = Slf4jLogger.getLogger[IO]
-  //   Log.entryPoint[F]("foo").pure[Resource[F, *]]
+  // import natchez.log.Log
+  // import io.chrisdavenport.log4cats.Logger
+  // import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+  // implicit val log: Logger[F] = Slf4jLogger.getLogger[IO]
+  // Log.entryPoint[F]("foo").pure[Resource[F, *]]
   // }
 
   def run(args: List[String]): IO[ExitCode] = {
@@ -116,5 +122,3 @@ object Main extends IOApp {
   }
 
 }
-
-
