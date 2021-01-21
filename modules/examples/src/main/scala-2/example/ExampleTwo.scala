@@ -15,9 +15,6 @@ object ExampleTwo {
   def main(args: Array[String]): Unit = {
     // val span: Span[IO] = ???
     val r1 = f().unsafeRunSync()
-    println(s"r1: $r1")
-
-    typeFoo()
   }
 
   def f(): IO[Int] = {
@@ -50,7 +47,7 @@ object ExampleTwo {
   // https://gitter.im/ovotech/general?at=5de7d1b1b065c6433c389312
   //
   //
-  //  type G[A]  = Kleisli[F, Span[F], A]
+  //      type G[A]  = Kleisli[F, Span[F], A]
   //      val lift   = λ[F ~> G](fa => Kleisli(_ => fa))
   //      val kernel = Kernel(req.headers.toList.map(h => (h.name.value -> h.value)).toMap)
   //      val spanR  = entryPoint.continueOrElseRoot(req.uri.path, kernel)
