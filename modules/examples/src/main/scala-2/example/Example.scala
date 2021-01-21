@@ -21,14 +21,32 @@ object Example extends IOApp {
   private final val NUM_VALUES_TO_SORT = 20
 
   def run(args: List[String]): IO[ExitCode] = {
-    entryPoint[IO].use { ep: EntryPoint[IO] =>
-      ep.root("this is the root span").use { span =>
-        {
-          val rf: Kleisli[IO, Span[IO], Unit] = runF[Kleisli[IO, Span[IO], *]]
-          rf.run(span)
-        }
-      } *> IO.sleep(1.second) // Turns out Tracer.close() in Jaeger doesn't block. Annoying. Maybe fix in there?
-    } as ExitCode.Success
+
+    val ff: Span[IO] => IO[Unit] = (span: Span[IO]) => {
+      val rf: Kleisli[IO, Span[IO], Unit] = runF[Kleisli[IO, Span[IO], *]]
+      rf.run(span)
+    }
+
+    val result: IO[Unit] = entryPoint[IO].use { ep: EntryPoint[IO] =>
+      ep.root("this is the root span").use(ff) *>
+        IO.sleep(1.second) // Turns out Tracer.close() in Jaeger doesn't block. Annoying. Maybe fix in there?
+    }
+
+    result as ExitCode.Success
+  }
+
+  def runF[F[_]: Sync: Trace: Parallel: Timer]: F[Unit] = {
+    // continuation to run
+    val k: F[Unit] = for {
+      as <- Sync[F].delay(List.fill(NUM_VALUES_TO_SORT)(Random.nextInt(1000)))
+      _  <- Sync[F].delay(println(s"Samples to sort: $as"))
+      _  <- qsort[F, Int](as)
+      u  <- Trace[F].traceUri
+      _  <- u.traverse(uri => Sync[F].delay(println(s"View this trace at $uri")))
+      _  <- Sync[F].delay(println("Done."))
+    } yield ()
+
+    Trace[F].span("Sort some stuff!")(k)
   }
 
   // Intentionally slow parallel quicksort, to demonstrate branching. If we run too quickly it seems
@@ -43,19 +61,6 @@ object Example extends IOApp {
             (qsort[F, A](a), qsort[F, A](b)).parMapN(_ ++ List(h) ++ _)
         }
       }
-    }
-  }
-
-  def runF[F[_]: Sync: Trace: Parallel: Timer]: F[Unit] = {
-    Trace[F].span("Sort some stuff!") {
-      for {
-        as <- Sync[F].delay(List.fill(NUM_VALUES_TO_SORT)(Random.nextInt(1000)))
-        _  <- Sync[F].delay(println(s"Samples to sort: $as"))
-        _  <- qsort[F, Int](as)
-        u  <- Trace[F].traceUri
-        _  <- u.traverse(uri => Sync[F].delay(println(s"View this trace at $uri")))
-        _  <- Sync[F].delay(println("Done."))
-      } yield ()
     }
   }
 
