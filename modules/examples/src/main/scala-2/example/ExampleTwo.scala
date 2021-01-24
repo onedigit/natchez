@@ -4,22 +4,33 @@
 
 package example
 
-import cats.data.{Kleisli, OptionT}
-import cats.effect.{Bracket, BracketThrow, IO, Resource}
-import cats.{~>, Functor}
-import natchez.{EntryPoint, Kernel, Span, Trace}
-import natchez.Trace.Implicits._
+import cats.{~>, Applicative}
+import cats.data._
+import cats.effect.{BracketThrow, ExitCode, IO, IOApp, Resource}
+import natchez._
 
-object ExampleTwo {
+// noinspection DuplicatedCode
+object ExampleTwo extends IOApp {
 
-  def main(args: Array[String]): Unit = {
-    // val span: Span[IO] = ???
-    val r1 = f().unsafeRunSync()
+  private final val NUM_VALUES_TO_SORT = 20
+
+  override def run(args: List[String]): IO[ExitCode] = {
+
+    val ff = runF[Kleisli[IO, Span[IO], *]]()
+
+    val result = Example
+      .entryPoint[IO]
+      .use(ep =>
+        ep.root("example2")
+          .use(spanF => ff(spanF))
+      )
+
+    result as ExitCode.Success
   }
 
-  def f(): IO[Int] = {
-    Trace[IO].span("f()") {
-      IO.pure(42)
+  def runF[F[_]: Applicative: Trace](): F[Int] = {
+    Trace[F].span("f()") {
+      Applicative[F].pure(42)
     }
   }
 
@@ -27,7 +38,7 @@ object ExampleTwo {
 
   def typeFoo[F[_]: BracketThrow](entryPoint: EntryPoint[F], kernel: Kernel): Unit = {
 
-    type G[A] = Kleisli[F, Span[F], A] // Span[F] => Span[F[A]]
+    type G[A] = Kleisli[F, Span[F], A] // Span[F] => F[A]
 
     val lift: F ~> G = λ[F ~> G](fa => Kleisli((sf: Span[F]) => fa))
 
@@ -44,6 +55,9 @@ object ExampleTwo {
     // val k1: Kleisli[List, Span[List], Int] = Kleisli.liftF(List(1, 2, 3))
   }
 
+  // https://github.com/tpolecat/skunk/blob/master/modules/example/src/main/scala-2/Http4s.scala
+  // https://github.com/tpolecat/skunk/blob/master/modules/example/src/main/scala-2/NatchezHttp4sModule.scala
+
   // https://gitter.im/ovotech/general?at=5de7d1b1b065c6433c389312
   //
   //
@@ -57,4 +71,7 @@ object ExampleTwo {
   //          routes.run(req.mapK(lift)).mapK(lower).map(_.mapK(lower)).value
   //        }
   //      }
+
+  // -------------------------------------------------------------------------------------------------------------------
+
 }

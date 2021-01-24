@@ -10,7 +10,7 @@ import cats.effect._
 import cats.syntax.all._
 import io.jaegertracing.Configuration
 import io.jaegertracing.internal.samplers.ConstSampler
-import natchez._
+import natchez.{EntryPoint, Span, Trace}
 
 import java.net.URI
 import scala.concurrent.duration._
@@ -41,12 +41,12 @@ object Example extends IOApp {
       as <- Sync[F].delay(List.fill(NUM_VALUES_TO_SORT)(Random.nextInt(1000)))
       _  <- Sync[F].delay(println(s"Samples to sort: $as"))
       _  <- qsort[F, Int](as)
-      u  <- Trace[F].traceUri
+      u  <- Trace.apply[F].traceUri
       _  <- u.traverse(uri => Sync[F].delay(println(s"View this trace at $uri")))
       _  <- Sync[F].delay(println("Done."))
     } yield ()
 
-    Trace[F].span("Sort some stuff!")(k)
+    Trace.apply[F].span("Sort some stuff!")(k)
   }
 
   // Intentionally slow parallel quicksort, to demonstrate branching. If we run too quickly it seems

@@ -12,17 +12,14 @@ import java.net.URI
 
 final case class NoopTrace[F[_]: Applicative]() extends Trace[F] {
 
-  override def put(fields: (String, TraceValue)*): F[Unit] =
-    Applicative[F].unit
+  override def put(fields: (String, TraceValue)*): F[Unit] = Applicative[F].unit
 
-  override def kernel: F[Kernel] =
-    Applicative[F].pure(Kernel(Map.empty))
+  override def kernel: F[Kernel] = Applicative[F].pure(Kernel(Map.empty))
 
-  override def span[A](name: String)(k: F[A]): F[A] =
-    k
+  override def span[A](name: String)(k: F[A]): F[A] = k
 
-  def traceId: F[Option[String]] =  /*_*/ none.pure[F] /*_*/
+  def traceId: F[Option[String]] = /*_*/ none.pure[F] /*_*/
 
-  def traceUri: F[Option[URI]] =  /*_*/ none.pure[F] /*_*/
+  def traceUri: F[Option[URI]] = /*_*/ none.pure[F] /*_*/
 
 }

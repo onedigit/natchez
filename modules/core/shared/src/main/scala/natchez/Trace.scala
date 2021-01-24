@@ -76,19 +76,29 @@ object Trace {
     */
   class KleisliTrace[F[_]](implicit ev: Bracket[F, Throwable]) extends Trace[Kleisli[F, Span[F], *]] {
 
+    // Span[F] => F[Unit]
     def put(fields: (String, TraceValue)*): Kleisli[F, Span[F], Unit] = Kleisli(spanF => spanF.put(fields: _*))
 
+    // Span[F] => F[Kernel]
     def kernel: Kleisli[F, Span[F], Kernel] = Kleisli(spanF => spanF.kernel)
 
-    def span[A](name: String)(k: Kleisli[F, Span[F], A]): Kleisli[F, Span[F], A] =
-      Kleisli(_.span(name).use(k.run))
+    // String => (Span[F] => F[A]) => (Span[F] => F[A])
+    def span[A](name: String)(k: Kleisli[F, Span[F], A]): Kleisli[F, Span[F], A] = {
+      Kleisli(spanF => spanF.span(name).use(k.run))
+    }
 
+    // Span[F] => F[Option[String]
     def traceId: Kleisli[F, Span[F], Option[String]] = Kleisli(_.traceId)
 
+    // Span[F] => F[Option[URI]
     def traceUri: Kleisli[F, Span[F], Option[URI]] = Kleisli(_.traceUri)
 
-    def lens[E](f: E => Span[F], g: (E, Span[F]) => E): Trace[Kleisli[F, E, *]] = {
+    def lens[E](
+        f: E => Span[F],
+        g: (E, Span[F]) => E
+    ): Trace[Kleisli[F, E, *]] = {
       new Trace[Kleisli[F, E, *]] {
+
         def kernel: Kleisli[F, E, Kernel] = Kleisli(e => f(e).kernel)
 
         def put(fields: (String, TraceValue)*): Kleisli[F, E, Unit] = Kleisli(e => f(e).put(fields: _*))
