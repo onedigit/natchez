@@ -5,6 +5,7 @@
 package example
 
 import cats.{~>, Applicative}
+import cats.arrow.FunctionK
 import cats.data._
 import cats.effect.{BracketThrow, ExitCode, IO, IOApp, Resource}
 import natchez._
@@ -41,6 +42,13 @@ object ExampleTwo extends IOApp {
     type G[A] = Kleisli[F, Span[F], A] // Span[F] => F[A]
 
     val lift: F ~> G = λ[F ~> G](fa => Kleisli((sf: Span[F]) => fa))
+
+    // lift is equivalent to the following
+    val lift_ : FunctionK[F, G] = new ~>[F, G] {
+      override def apply[A](fa: F[A]): G[A] = {
+        Kleisli((sf: Span[F]) => fa)
+      }
+    }
 
     val spanR: Resource[F, Span[F]] = entryPoint.continueOrElseRoot("hello", kernel)
 
